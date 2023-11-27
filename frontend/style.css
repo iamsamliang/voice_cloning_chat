@@ -1,0 +1,26 @@
+body {
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-size: x-large;
+}
+
+.container {
+    display: flex;
+    justify-content: space-around;
+}
+
+/* .icon-container {
+    margin-bottom: 20px;
+} */
+
+.icon-container img {
+    max-height: 100px;
+}
+
+button {
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    background-color: lightblue;
+    font-size: large
+}
