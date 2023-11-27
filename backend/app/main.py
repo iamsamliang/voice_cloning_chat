@@ -1,3 +1,4 @@
+from concurrent.futures import thread
 import os
 import json
 import websockets
@@ -29,20 +30,38 @@ async def home() -> FileResponse:
     return FileResponse("frontend/index.html")
 
 
-async def say_to_ai(
-    text: str,
-) -> bytes:
-    ## pass user input to an LLM
+async def say_to_ai(text: str, federer_id: str, thread_id: str) -> bytes:
+    # pass user input to gpt-3.5-turbo
 
-    PROMPT_MESSAGES = [
-        {"role": "system", "content": "You are Roger Federer. "},
-        {"role": "user", "content": text},
-    ]
+    openai.beta.threads.messages.create(thread_id=thread_id, role="user", content=text)
 
-    result = openai.chat.completions.create(
-        model="gpt-3.5-turbo", messages=PROMPT_MESSAGES, max_tokens=300  # type: ignore
+    run = openai.beta.threads.runs.create(
+        thread_id=thread_id,
+        assistant_id=federer_id,
     )
-    result_text = result.choices[0].message.content
+
+    while (
+        openai.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id).status
+        != "completed"
+    ):
+        continue
+
+    run = openai.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+
+    messages = openai.beta.threads.messages.list(thread_id=thread_id, limit=1)
+
+    result_text = messages.data[0].content[0].text.value  # type: ignore
+
+    # PROMPT_MESSAGES = [
+    #     {"role": "system", "content": "You are Roger Federer. "},
+    #     {"role": "user", "content": text},
+    # ]
+
+    # result = openai.chat.completions.create(
+    #     model="gpt-3.5-turbo", messages=PROMPT_MESSAGES, max_tokens=300  # type: ignore
+    # )
+    # result_text = result.choices[0].message.content
+
     print("GPT done processing\n\n")
     print("HT start processing")
 
@@ -108,72 +127,72 @@ def play_audio(audio_bytes: bytes) -> None:
 
 
 # Deepgram WebSocket streaming function
-async def stream_to_deepgram(websocket: WebSocket) -> None:
-    uri = "wss://api.deepgram.com/v1/listen?model=nova-2-conversationalai&language=en-US&smart_format=true&endpointing=3000"
-    headers = {"Authorization": f"token {os.getenv('DEEPGRAM_API_KEY')}"}
-    keepalive_task = None
+# async def stream_to_deepgram(websocket: WebSocket) -> None:
+#     uri = "wss://api.deepgram.com/v1/listen?model=nova-2-conversationalai&language=en-US&smart_format=true&endpointing=3000"
+#     headers = {"Authorization": f"token {os.getenv('DEEPGRAM_API_KEY')}"}
+#     keepalive_task = None
 
-    try:
-        async with websockets.connect(uri, extra_headers=headers) as dg_websocket:
-            # full_transcription = ""
+#     try:
+#         async with websockets.connect(uri, extra_headers=headers) as dg_websocket:
+#             # full_transcription = ""
 
-            print("established connection with Deepgram\n\n")
-            keepalive_task = asyncio.create_task(send_keepalive(dg_websocket))
+#             print("established connection with Deepgram\n\n")
+#             keepalive_task = asyncio.create_task(send_keepalive(dg_websocket))
 
-            while True:
-                print("waiting to receive bytes from client")
-                # receive binary audio data from client
-                client_audio_bytes = await websocket.receive_bytes()
-                assert client_audio_bytes is not None
-                print("received bytes from client")
+#             while True:
+#                 print("waiting to receive bytes from client")
+#                 # receive binary audio data from client
+#                 client_audio_bytes = await websocket.receive_bytes()
+#                 assert client_audio_bytes is not None
+#                 print("received bytes from client")
 
-                # play_audio(client_audio_bytes)  # testing purposes only
+#                 # play_audio(client_audio_bytes)  # testing purposes only
 
-                # Stream the audio bytes to Deepgram
-                await dg_websocket.send(client_audio_bytes)
+#                 # Stream the audio bytes to Deepgram
+#                 await dg_websocket.send(client_audio_bytes)
 
-                # Receive real-time transcription from Deepgram
-                response = await dg_websocket.recv()
-                transcription = json.loads(response)
-                full_text = transcription["channel"]["alternatives"][0]["transcript"]
+#                 # Receive real-time transcription from Deepgram
+#                 response = await dg_websocket.recv()
+#                 transcription = json.loads(response)
+#                 full_text = transcription["channel"]["alternatives"][0]["transcript"]
 
-                print(f"Transcription from DG: {full_text}\n\n")
+#                 print(f"Transcription from DG: {full_text}\n\n")
 
-                # check for the 'speech_final' flag or equivalent in Deepgram's response
-                # is_final = transcription["speech_final"]
-                # full_transcription += text
+#                 # check for the 'speech_final' flag or equivalent in Deepgram's response
+#                 # is_final = transcription["speech_final"]
+#                 # full_transcription += text
 
-                print("Processing full transcript")
-                audio_bytes = await say_to_ai(text=full_text)
+#                 print("Processing full transcript")
+#                 audio_bytes = await say_to_ai(text=full_text)
 
-                # Send AI audio and text response back to your WebSocket client
-                print("Sending audio back to user\n\n")
-                await websocket.send_bytes(audio_bytes)
+#                 # Send AI audio and text response back to your WebSocket client
+#                 print("Sending audio back to user\n\n")
+#                 await websocket.send_bytes(audio_bytes)
 
-                # if is_final:
-                #     print("Processing full transcript")
-                #     print(f"\nFull transcription from DG: {full_transcription}\n\n")
-                #     # Process the complete transcription and get AI response
-                #     audio_bytes = await say_to_ai(text=full_transcription)
+#                 # if is_final:
+#                 #     print("Processing full transcript")
+#                 #     print(f"\nFull transcription from DG: {full_transcription}\n\n")
+#                 #     # Process the complete transcription and get AI response
+#                 #     audio_bytes = await say_to_ai(text=full_transcription)
 
-                #     # Send AI audio and text response back to your WebSocket client
-                #     print("Sending audio back to user\n\n")
-                #     await websocket.send_bytes(audio_bytes)
+#                 #     # Send AI audio and text response back to your WebSocket client
+#                 #     print("Sending audio back to user\n\n")
+#                 #     await websocket.send_bytes(audio_bytes)
 
-                #     # Reset the full transcription for the next speaking segment
-                #     full_transcription = ""
-    except websockets.exceptions.InvalidStatusCode as e:
-        # If the request fails, print both the error message and the request ID from the HTTP headers
-        print(f'ERROR: Could not connect to Deepgram! {e.headers.get("dg-error")}')
-        print(
-            f'Please contact Deepgram Support with request ID {e.headers.get("dg-request-id")}'
-        )
-    except Exception as e:
-        raise Exception(e)
-    finally:
-        if keepalive_task:
-            keepalive_task.cancel()
-            await keepalive_task  # await to ensure it's properly closed
+#                 #     # Reset the full transcription for the next speaking segment
+#                 #     full_transcription = ""
+#     except websockets.exceptions.InvalidStatusCode as e:
+#         # If the request fails, print both the error message and the request ID from the HTTP headers
+#         print(f'ERROR: Could not connect to Deepgram! {e.headers.get("dg-error")}')
+#         print(
+#             f'Please contact Deepgram Support with request ID {e.headers.get("dg-request-id")}'
+#         )
+#     except Exception as e:
+#         raise Exception(e)
+#     finally:
+#         if keepalive_task:
+#             keepalive_task.cancel()
+#             await keepalive_task  # await to ensure it's properly closed
 
 
 def transcribe(input_bytes: bytes, input_format: str) -> str:
@@ -205,7 +224,9 @@ def transcribe(input_bytes: bytes, input_format: str) -> str:
     return full_text  # type: ignore
 
 
-async def stream_to_whisper(websocket: WebSocket) -> None:
+async def stream_to_whisper(
+    websocket: WebSocket, federer_id: str, thread_id: str
+) -> None:
     try:
         while True:
             print("waiting to receive bytes from client")
@@ -223,7 +244,7 @@ async def stream_to_whisper(websocket: WebSocket) -> None:
             print(f"Transcription from Whisper: {full_text}\n\n")
 
             print("Processing full transcript")
-            audio_bytes = await say_to_ai(text=full_text)  # type: ignore
+            audio_bytes = await say_to_ai(full_text, federer_id, thread_id)  # type: ignore
 
             # Send AI audio and text response back to your WebSocket client
             print("Sending audio back to user\n\n")
@@ -235,9 +256,15 @@ async def stream_to_whisper(websocket: WebSocket) -> None:
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
+    federer_id = openai.beta.assistants.create(
+        instructions="You are Roger Federer. You are having a conversation with a friend who you have inspired to play tennis. Interact with them with warmth, kindness, and like you're having a conversation with him.",
+        name="Roger Federer",
+        model="gpt-3.5-turbo",
+    ).id
+    thread_id = openai.beta.threads.create().id
     try:
         print("websocket accepted")
-        await stream_to_whisper(websocket)
+        await stream_to_whisper(websocket, federer_id, thread_id)
         print("finished sending audio back to user")
     except WebSocketDisconnect:
         print("disconnecting")
