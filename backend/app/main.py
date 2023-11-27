@@ -77,8 +77,6 @@ async def say_to_ai(text: str, federer_id: str, thread_id: str) -> bytes:
 
     clone_id = response.json()[0]["id"]
 
-    print("HT clone got")
-
     url = "https://api.play.ht/api/v2/tts/stream"
 
     payload = {
@@ -120,9 +118,7 @@ async def send_keepalive(
 def play_audio(audio_bytes: bytes) -> None:
     # Save the audio bytes to a file
     audio_stream = io.BytesIO(audio_bytes)
-    audio = AudioSegment.from_file(
-        audio_stream, format="webm"
-    )  # Replace 'wav' with the correct format of your audio
+    audio = AudioSegment.from_file(audio_stream, format="webm")
 
     # Play the audio
     play(audio)
@@ -198,7 +194,7 @@ def play_audio(audio_bytes: bytes) -> None:
 
 
 def transcribe(input_bytes: bytes, input_format: str) -> str:
-    # This is a workaround for OpenAI Whisper API bug for MediaRecorder files
+    # This function is a workaround for an OpenAI Whisper API bug for MediaRecorder files
     input_file = f"tempinputfile.{input_format}"
     with open(input_file, "wb") as f:
         f.write(input_bytes)
@@ -259,7 +255,6 @@ async def stream_to_whisper(
 
             print(f"Transcription from Whisper: {full_text}\n\n")
 
-            print("Processing full transcript")
             audio_bytes = await say_to_ai(full_text, federer_id, thread_id)  # type: ignore
 
             # Send AI audio and text response back to your WebSocket client
