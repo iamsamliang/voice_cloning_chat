@@ -22,6 +22,7 @@ mypy = "^1.7.1"
 ipykernel = "^6.26.0"
 types-requests = "^2.31.0.10"
 pydub = "^0.25.1"
+python-magic = "^0.4.27"
 
 [build-system]
 requires = ["poetry-core"]
