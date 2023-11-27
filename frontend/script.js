@@ -1,15 +1,13 @@
 let ws = null;
 let mediaRecorder = null;
-// let vadProcessor = null;
 let shouldSendData = true;
 let isRecording = false;
-let shouldDetectTalking = true;
+let isDetectTalking = true;
 let isWebSocketOpen = false;
 let audioChunks = [];
 
 function stopRecording() {
     if (mediaRecorder && mediaRecorder.state === "recording") {
-        console.log("Stopping recording not sending data over");
         shouldSendData = false;
         mediaRecorder.stop();
     }
@@ -21,6 +19,11 @@ function setupWebSocket() {
     ws.onopen = function(event) {
         console.log('WebSocket connection established');
         isWebSocketOpen = true;
+        mediaRecorder = null;
+        shouldSendData = true;
+        isRecording = false;
+        isDetectTalking = true;
+        audioChunks = [];
         startVoiceDetection();
     };
 
@@ -37,7 +40,7 @@ function setupWebSocket() {
     ws.onclose = function(event) {
         console.log('WebSocket connection closed:', event);
         isWebSocketOpen = false;
-        stopRecording(); // handle this
+        stopRecording();
         ws = null;
     };
 }
@@ -50,15 +53,13 @@ async function handleServerMessage(message) {
             // play audio bytes from backend
             console.log('Received audio bytes from server');
 
-            shouldDetectTalking = false;
+            isDetectTalking = false;
             // don't record when audio plays from speaker
             shouldSendData = false;
             if (mediaRecorder && mediaRecorder.state === "recording") {
                 console.log("Stopping recording while playing sound from speakers");
                 shouldSendData = false;
                 mediaRecorder.stop(); // This will set isRecording to false in the onstop event
-            } else {
-                console.log("Media recorder already stopped while playing sound from speakers");
             }
             audioChunks = [];
 
@@ -72,13 +73,12 @@ async function handleServerMessage(message) {
                 source.buffer = audioBuffer;
                 source.connect(playContext.destination); // connect to speakers
                 source.onended = () => {
-                    shouldDetectTalking = true;
+                    isDetectTalking = true;
                     // resume recording after the audio has finished playing
                     if (mediaRecorder && mediaRecorder.state === "inactive") {
                         console.log("Starting recording after playing sound from speakers")
                         mediaRecorder.start();
                         shouldSendData = true;
-                        // isRecording = true; // Ensure to set isRecording to true again
                     }
                 };
                 source.start(); // play the audio via speakers
@@ -90,53 +90,6 @@ async function handleServerMessage(message) {
         console.error('Error processing message from server:', error);
     }
 }
-
-// async function startRecording() {
-//     try {
-//         console.log("Starting recording");
-//         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-//         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-//         const audioSource = audioContext.createMediaStreamSource(micStream);
-//         // using VAD
-//         vadProcessor = new VAD(source, {
-//             onVoiceStart: function() {
-//                 console.log('Voice start');
-//                 audioChunks = []
-//             },
-//             onVoiceStop: function() {
-//                 console.log('Voice stop');
-//                 // Send the buffered audio data over WebSocket
-//                 if (ws && ws.readyState === WebSocket.OPEN) {
-//                     console.log("Sending voice data over socket");
-//                     const blob = new Blob(audioChunks);
-//                     ws.send(blob); 
-//                     console.log("Voice data successfully sent over socket");
-//                 }
-//             },
-//             onUpdate: function(val) {
-//                 console.log('Current voice activity value:', val);
-//                 // Optional: Buffer audio data here
-//             }
-//         });
-
-//         // const processor = audioContext.createScriptProcessor(4096, 1, 1);
-//         // source.connect(processor);
-//         // processor.connect(audioContext.destination);
-
-//         // processor.onaudioprocess = function(e) {
-//         //     // Get the audio data from the processor
-//         //     const audioData = e.inputBuffer.getChannelData(0);
-//         //     // Convert audio data to a blob and add it to the buffer
-//         //     const blob = new Blob([new Float32Array(audioData)], { type: 'audio/webm' });
-//         //     audioChunks.push(blob);
-//         // };
-
-//         console.log("Microphone enabled");
-        
-//     } catch (error) {
-//         console.error('Error accessing media devices:', error);
-//     }
-// }
 
 function startVoiceDetection() {
     navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(stream => {
@@ -162,17 +115,15 @@ function startVoiceDetection() {
         let timeoutReference = null;
 
         mediaRecorder.ondataavailable = event => {
-            console.log("Pushing data onto the audio chunks");
             audioChunks.push(event.data);
         };
 
         mediaRecorder.onstop = () => {
-            console.log("Sending data over to backend")
             isRecording = false;
+            isDetectTalking = false;
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             audioChunks = [];
 
-            console.log(shouldSendData);
             if (shouldSendData && ws && ws.readyState === WebSocket.OPEN) {
                 console.log("Mime type: ", audioBlob.type);
                 ws.send(audioBlob);
@@ -183,21 +134,20 @@ function startVoiceDetection() {
         };
 
         function detectTalking() {
-            if (!shouldDetectTalking) {
-                console.log("Not detecting voice!!!");
+            if (!isDetectTalking) {
                 requestAnimationFrame(detectTalking);
                 return; // Skip processing if detection is temporarily disabled
             }
-            console.log("Detecting voice!!");
             analyser.getByteFrequencyData(dataArray);
             
             let sum = dataArray.reduce((acc, value) => acc + value, 0);
 
             let average = sum / bufferLength;
 
-            const startThreshold = 20; // Example value
-            const stopThreshold = 1;  // Example value
-            const stopDuration = 2000; // 3 seconds
+            // for optimal quiet conditions
+            const startThreshold = 20;
+            const stopThreshold = 5;
+            const stopDuration = 1500; // 1.5 seconds
 
             if (average > startThreshold) {
                 if (timeoutReference) {
@@ -206,7 +156,6 @@ function startVoiceDetection() {
                 }
                 if (!isRecording) {
                     console.log("Starting recording");
-                    console.log("average: ", average);
                     if (mediaRecorder && mediaRecorder.state === "inactive") {
                         mediaRecorder.start();
                     }
@@ -216,7 +165,6 @@ function startVoiceDetection() {
                 if (!timeoutReference) {
                     timeoutReference = setTimeout(() => {
                         console.log("Stopping recording");
-                        console.log("average: ", average);
                         mediaRecorder.stop();
                         isRecording = false;
                         timeoutReference = null;

@@ -1,6 +1,4 @@
-from concurrent.futures import thread
 import os
-import json
 import websockets
 import openai
 import requests
@@ -62,7 +60,9 @@ async def say_to_ai(text: str, federer_id: str, thread_id: str) -> bytes:
     # )
     # result_text = result.choices[0].message.content
 
+    print(f"GPT text {result_text}\n\n")
     print("GPT done processing\n\n")
+
     print("HT start processing")
 
     url = "https://api.play.ht/api/v2/cloned-voices"
@@ -76,6 +76,8 @@ async def say_to_ai(text: str, federer_id: str, thread_id: str) -> bytes:
     response = requests.get(url, headers=headers)
 
     clone_id = response.json()[0]["id"]
+
+    print("HT clone got")
 
     url = "https://api.play.ht/api/v2/tts/stream"
 
@@ -205,8 +207,22 @@ def transcribe(input_bytes: bytes, input_format: str) -> str:
         output_audio = temp_mp3.name
 
     # Use ffmpeg to convert the webm file to mp3
-    command = f"ffmpeg -y -i {input_file} -vn -ar 16000 -ac 1 {output_audio}"
-    subprocess.call(command, shell=True)
+    # command = f"ffmpeg -y -i {input_file} -vn -ar 16000 -ac 1 {output_audio}"
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_file,
+        "-vn",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        output_audio,
+    ]
+    subprocess.call(command)
+
+    # subprocess.call(command, shell=True)
     # Transcribe the audio
     audio_file = open(output_audio, "rb")
     full_text = openai.audio.transcriptions.create(
@@ -257,7 +273,7 @@ async def stream_to_whisper(
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     federer_id = openai.beta.assistants.create(
-        instructions="You are Roger Federer. You are having a conversation with a friend who you have inspired to play tennis. Interact with them with warmth, kindness, and like you're having a conversation with him.",
+        instructions="You are Roger Federer. You are having a conversation with your good friend. Interact to him with warmth and as if you're meeting your old buddy. Don't make your sentences too long.",
         name="Roger Federer",
         model="gpt-3.5-turbo",
     ).id
