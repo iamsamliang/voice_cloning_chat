@@ -7,6 +7,7 @@ Frontend contains JS code for UI and client-side logic. Backend uses FastAPI (Py
 1. STT: OpenAI Whisper
 2. LLM: OpenAI gpt-3.5-turbo
 3. TTS: PlayHT Voice Clone of Roger Federer
+
 You'll need to use your own OpenAI API Key and PlayHT API Key. `rf_speech.mov` contains the audio used to clone Federer's voice which you have to do on PlayHT's website as well.
 
 
