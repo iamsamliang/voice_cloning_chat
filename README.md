@@ -3,10 +3,11 @@
 Web application to chat with tennis legend Roger Federer.
 
 # Structure
-Frontend contains JS code for UI and client-side logic. Backend uses FastAPI (Python) and websockets; contains the pipelines and server logic. Uses these models:
-1. STT: Whisper
-2. LLM: gpt-3.5-turbo
+Frontend contains JS code for UI and client-side logic. Backend uses FastAPI (Python) and websockets; contains the pipelines and server logic. App uses these models:
+1. STT: OpenAI Whisper
+2. LLM: OpenAI gpt-3.5-turbo
 3. TTS: PlayHT Voice Clone of Roger Federer
+You'll need to use your own OpenAI API Key and PlayHT API Key. `rf_speech.mov` contains the audio used to clone Federer's voice which you have to do on PlayHT's website as well.
 
 
 # To run
